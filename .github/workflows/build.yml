@@ -107,7 +107,9 @@ jobs:
           APP=/tmp/TikTok.app
           mkdir -p $APP
           cp /tmp/TikTok $APP/
-          cp ios/TikTokClient/Supporting\ Files/Info.plist $APP/
+          # Fix Info.plist - replace Xcode build vars with real values
+          sed 's/\$(EXECUTABLE_NAME)/TikTok/g; s/\$(PRODUCT_NAME)/TikTok/g' \
+            "ios/TikTokClient/Supporting Files/Info.plist" > "$APP/Info.plist"
           echo "APPL????" > $APP/PkgInfo
           chmod +x $APP/TikTok
           HOMEBREW_PREFIX=$(brew --prefix)
