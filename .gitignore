@@ -1,0 +1,22 @@
+# Node
+server/node_modules/
+server/data/
+server/uploads/videos/*
+server/uploads/thumbnails/*
+server/uploads/avatars/*
+!server/uploads/videos/.gitkeep
+!server/uploads/thumbnails/.gitkeep
+!server/uploads/avatars/.gitkeep
+server/package-lock.json
+
+# Xcode
+ios/*.xcworkspace
+ios/*.xcodeproj
+ios/build/
+ios/Pods/
+ios/*.xcuserdata
+
+# macOS
+.DS_Store
+*.swp
+*.swo

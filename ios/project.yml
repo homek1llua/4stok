@@ -1,0 +1,40 @@
+name: TikTokClient
+options:
+  bundleIdPrefix: com.tiktok
+  deploymentTarget:
+    iOS: "9.0"
+  xcodeVersion: "13.0"
+
+settings:
+  base:
+    IPHONEOS_DEPLOYMENT_TARGET: "9.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    SDKROOT: iphoneos
+    ARCHS: "$(ARCHS_STANDARD_32_64_BIT)"
+    VALID_ARCHS: "armv7 arm64"
+    CLANG_ENABLE_MODULES: YES
+    ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES: NO
+    GCC_OPTIMIZATION_LEVEL: "0"
+    ONLY_ACTIVE_ARCH: NO
+    CODE_SIGNING_REQUIRED: NO
+    CODE_SIGNING_ALLOWED: NO
+    CODE_SIGN_IDENTITY: ""
+    GCC_PRECOMPILE_PREFIX_HEADER: NO
+
+targets:
+  TikTokClient:
+    type: application
+    platform: iOS
+    deploymentTarget: "9.0"
+    sources:
+      - path: TikTokClient/
+        excludes:
+          - "Storyboards/LaunchScreen.storyboard"
+      - path: TikTokClient/Storyboards/LaunchScreen.storyboard
+        type: storyboard
+    settings:
+      base:
+        INFOPLIST_FILE: TikTokClient/Supporting Files/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.tiktok.client
+        PRODUCT_NAME: TikTok
+    dependencies: []
