@@ -58,7 +58,8 @@ jobs:
 
           CFLAGS="-target armv7-apple-ios9.0 \
             -isysroot $SDK \
-            -I$SRC -I$SDK/usr/include \
+            -I$SRC -I$SRC/Models -I$SRC/Services -I$SRC/ViewControllers \
+            -I$SDK/usr/include \
             -fobjc-arc -O2 \
             -miphoneos-version-min=9.0 \
             -Wno-deprecated-declarations \
@@ -66,9 +67,10 @@ jobs:
             -D__ENVIRONMENT_IPHONE_OS_VERSION_MIN_REQUIRED__=90000 \
             -D__IPHONE_OS_VERSION_MIN_REQUIRED=90000"
 
-          for f in $(find $SRC -name "*.m" | sort); do
-            echo "  CC $(basename $f)"
-            $CC -c $CFLAGS -o $OBJ/$(basename $f .m).o $f 2>&1 || true
+          find "$SRC" -name "*.m" -print0 | sort -z | while IFS= read -r -d '' f; do
+            basename=$(basename "$f" .m)
+            echo "  CC $basename"
+            $CC -c $CFLAGS -o "$OBJ/$basename.o" "$f" 2>&1 || true
           done
 
       - name: Link
@@ -78,12 +80,15 @@ jobs:
           HOMEBREW_PREFIX=$(brew --prefix)
           CC=$HOMEBREW_PREFIX/opt/llvm/bin/clang
 
+          # Collect all .o files properly (handle spaces in paths)
+          O_FILES=$(find "$OBJ" -name "*.o" | tr '\n' ' ')
+
           $CC -target armv7-apple-ios9.0 \
             -isysroot $SDK \
             -F$SDK/System/Library/Frameworks \
             -L$SDK/usr/lib \
             -o /tmp/TikTok \
-            $OBJ/*.o \
+            $O_FILES \
             -framework Foundation \
             -framework UIKit \
             -framework AVFoundation \
