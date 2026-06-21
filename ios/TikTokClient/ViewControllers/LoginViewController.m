@@ -12,6 +12,8 @@
 @property (nonatomic, strong) UIButton *signupButton;
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UIActivityIndicatorView *spinner;
+@property (nonatomic, strong) UIButton *serverButton;
+@property (nonatomic, strong) UILabel *serverLabel;
 
 @end
 
@@ -121,6 +123,29 @@
 
   [self.spinner.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor].active = YES;
   [self.spinner.topAnchor constraintEqualToAnchor:self.signupButton.bottomAnchor constant:20].active = YES;
+
+  self.serverLabel = [[UILabel alloc] init];
+  NSString *url = [[NSUserDefaults standardUserDefaults] stringForKey:@"server_url"] ?: @"http://localhost:3000/api";
+  self.serverLabel.text = [NSString stringWithFormat:@"Server: %@", url];
+  self.serverLabel.textColor = [UIColor grayColor];
+  self.serverLabel.font = [UIFont systemFontOfSize:11];
+  self.serverLabel.textAlignment = NSTextAlignmentCenter;
+  self.serverLabel.translatesAutoresizingMaskIntoConstraints = NO;
+  self.serverLabel.userInteractionEnabled = YES;
+  [self.view addSubview:self.serverLabel];
+
+  self.serverButton = [UIButton buttonWithType:UIButtonTypeSystem];
+  [self.serverButton setTitle:@"Change Server" forState:UIControlStateNormal];
+  [self.serverButton setTitleColor:[UIColor grayColor] forState:UIControlStateNormal];
+  self.serverButton.titleLabel.font = [UIFont systemFontOfSize:12];
+  self.serverButton.translatesAutoresizingMaskIntoConstraints = NO;
+  [self.serverButton addTarget:self action:@selector(serverTapped) forControlEvents:UIControlEventTouchUpInside];
+  [self.view addSubview:self.serverButton];
+
+  [self.serverLabel.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor].active = YES;
+  [self.serverLabel.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor constant:-50].active = YES;
+  [self.serverButton.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor].active = YES;
+  [self.serverButton.topAnchor constraintEqualToAnchor:self.serverLabel.bottomAnchor constant:2].active = YES;
 }
 
 - (void)loginTapped {
@@ -163,6 +188,29 @@
 - (void)showAlert:(NSString *)msg {
   UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Error" message:msg preferredStyle:UIAlertControllerStyleAlert];
   [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+  [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)serverTapped {
+  NSString *current = [[NSUserDefaults standardUserDefaults] stringForKey:@"server_url"] ?: @"http://localhost:3000/api";
+  UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Server URL" message:@"Enter your backend server address" preferredStyle:UIAlertControllerStyleAlert];
+  [alert addTextFieldWithConfigurationHandler:^(UITextField *tf) {
+    tf.text = current;
+    tf.placeholder = @"http://192.168.1.100:3000/api";
+    tf.autocapitalizationType = UITextAutocapitalizationTypeNone;
+    tf.autocorrectionType = UITextAutocorrectionTypeNo;
+    tf.keyboardType = UIKeyboardTypeURL;
+  }];
+  [alert addAction:[UIAlertAction actionWithTitle:@"Save" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    NSString *url = alert.textFields[0].text;
+    if (url.length > 0) {
+      [APIClient sharedClient].baseURL = url;
+      [[NSUserDefaults standardUserDefaults] setObject:url forKey:@"server_url"];
+      [[NSUserDefaults standardUserDefaults] synchronize];
+      self.serverLabel.text = [NSString stringWithFormat:@"Server: %@", url];
+    }
+  }]];
+  [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
   [self presentViewController:alert animated:YES completion:nil];
 }
 
