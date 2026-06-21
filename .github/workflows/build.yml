@@ -16,20 +16,22 @@ jobs:
 
       - name: Install deps
         run: |
+          HOMEBREW_PREFIX=$(brew --prefix)
+          echo "HOMEBREW_PREFIX=$HOMEBREW_PREFIX" >> $GITHUB_ENV
           brew install llvm ldid xcodegen 2>/dev/null || brew upgrade llvm ldid xcodegen 2>/dev/null
-          # Add LLVM to PATH (supports armv7 unlike Apple clang)
-          echo "/usr/local/opt/llvm/bin" >> $GITHUB_PATH
-          echo "LDID=/usr/local/bin/ldid" >> $GITHUB_ENV
+          # LLVM's clang supports armv7, Apple's clang does not
+          echo "$HOMEBREW_PREFIX/opt/llvm/bin" >> $GITHUB_PATH
 
       - name: Check toolchain
         run: |
+          HOMEBREW_PREFIX=$(brew --prefix)
           echo "=== System clang ==="
           clang --version
           echo "=== LLVM clang ==="
-          /usr/local/opt/llvm/bin/clang --version
-          echo "=== Available targets ==="
-          /usr/local/opt/llvm/bin/clang -print-targets 2>/dev/null | grep -i arm || echo "checking..."
-          /usr/local/opt/llvm/bin/llc --version 2>/dev/null | grep -i arm
+          $HOMEBREW_PREFIX/opt/llvm/bin/clang --version
+          echo "=== arm target in LLVM ==="
+          $HOMEBREW_PREFIX/opt/llvm/bin/clang -print-targets 2>/dev/null | grep -i arm || \
+            $HOMEBREW_PREFIX/opt/llvm/bin/llc --version 2>/dev/null | grep -i arm
 
       - name: Check iOS SDK
         run: |
@@ -48,7 +50,11 @@ jobs:
           SRC=ios/TikTokClient
           OBJ=/tmp/obj
           mkdir -p $OBJ
-          CC=/usr/local/opt/llvm/bin/clang
+          HOMEBREW_PREFIX=$(brew --prefix)
+          CC=$HOMEBREW_PREFIX/opt/llvm/bin/clang
+
+          # First, let's see what targets LLVM supports
+          $CC -print-targets 2>/dev/null | grep -i armv7 || echo "armv7 may not be a target"
 
           CFLAGS="-target armv7-apple-ios9.0 \
             -isysroot $SDK \
@@ -58,24 +64,19 @@ jobs:
             -Wno-deprecated-declarations \
             -Wno-objc-root-class \
             -D__ENVIRONMENT_IPHONE_OS_VERSION_MIN_REQUIRED__=90000 \
-            -D__IPHONE_OS_VERSION_MIN_REQUIRED=90000 \
-            -fmodules"
+            -D__IPHONE_OS_VERSION_MIN_REQUIRED=90000"
 
           for f in $(find $SRC -name "*.m" | sort); do
             echo "  CC $(basename $f)"
-            $CC -c $CFLAGS -o $OBJ/$(basename $f .m).o $f 2>&1
-            if [ $? -ne 0 ]; then
-              echo "FAILED: $f"
-              # Try without modules
-              $CC -c $CFLAGS -fmodules -o $OBJ/$(basename $f .m).o $f 2>&1 || true
-            fi
+            $CC -c $CFLAGS -o $OBJ/$(basename $f .m).o $f 2>&1 || true
           done
 
       - name: Link
         run: |
           SDK=${{ env.SDK_PATH }}
           OBJ=/tmp/obj
-          CC=/usr/local/opt/llvm/bin/clang
+          HOMEBREW_PREFIX=$(brew --prefix)
+          CC=$HOMEBREW_PREFIX/opt/llvm/bin/clang
 
           $CC -target armv7-apple-ios9.0 \
             -isysroot $SDK \
@@ -104,7 +105,8 @@ jobs:
           cp ios/TikTokClient/Supporting\ Files/Info.plist $APP/
           echo "APPL????" > $APP/PkgInfo
           chmod +x $APP/TikTok
-          ldid -S $APP/TikTok 2>/dev/null || echo "ldid signing skipped"
+          HOMEBREW_PREFIX=$(brew --prefix)
+          $HOMEBREW_PREFIX/bin/ldid -S $APP/TikTok 2>/dev/null || echo "ldid signing skipped"
           mkdir -p /tmp/Payload
           cp -r $APP /tmp/Payload/
           cd /tmp && zip -r ~/TikTok-iOS9-iphone4s.ipa Payload
