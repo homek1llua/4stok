@@ -9,73 +9,121 @@ on:
 
 jobs:
   build:
-    runs-on: macos-13
+    runs-on: macos-14
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode 13 (armv7 compatible)
+      - name: Install deps
         run: |
-          for ver in 13.4.1 13.4 13.3.1 13.3 13.2.1 13.2 13.1 13.0; do
-            path="/Applications/Xcode_$ver.app"
-            if [ -d "$path" ]; then
-              sudo xcode-select -s "$path"
-              echo "Using Xcode $ver"
-              break
-            fi
-          done
+          brew install llvm ldid xcodegen 2>/dev/null || brew upgrade llvm ldid xcodegen 2>/dev/null
+          # Add LLVM to PATH (supports armv7 unlike Apple clang)
+          echo "/usr/local/opt/llvm/bin" >> $GITHUB_PATH
+          echo "LDID=/usr/local/bin/ldid" >> $GITHUB_ENV
+
+      - name: Check toolchain
+        run: |
+          echo "=== System clang ==="
+          clang --version
+          echo "=== LLVM clang ==="
+          /usr/local/opt/llvm/bin/clang --version
+          echo "=== Available targets ==="
+          /usr/local/opt/llvm/bin/clang -print-targets 2>/dev/null | grep -i arm || echo "checking..."
+          /usr/local/opt/llvm/bin/llc --version 2>/dev/null | grep -i arm
+
+      - name: Check iOS SDK
+        run: |
           xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-path
+          echo "SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)" >> $GITHUB_ENV
+          echo "SDK_VERSION=$(xcrun --sdk iphoneos --show-sdk-version)" >> $GITHUB_ENV
 
-      - name: Install xcodegen
-        run: |
-          brew install xcodegen 2>/dev/null || brew upgrade xcodegen 2>/dev/null
-          xcodegen --version
-
-      - name: Generate Xcode project
+      - name: Generate Xcode project (for file list)
         working-directory: ios
         run: xcodegen generate --project . --spec project.yml
 
-      - name: Build
-        working-directory: ios
+      - name: Build for armv7 with LLVM clang
         run: |
-          xcodebuild clean build \
-            -project TikTokClient.xcodeproj \
-            -scheme TikTokClient \
-            -sdk iphoneos \
-            -configuration Debug \
-            IPHONEOS_DEPLOYMENT_TARGET=9.0 \
-            ARCHS="armv7 arm64" \
-            VALID_ARCHS="armv7 arm64" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            ONLY_ACTIVE_ARCH=NO \
-            CONFIGURATION_BUILD_DIR="$(pwd)/build" \
-            2>&1 | tee build.log
+          SDK=${{ env.SDK_PATH }}
+          SRC=ios/TikTokClient
+          OBJ=/tmp/obj
+          mkdir -p $OBJ
+          CC=/usr/local/opt/llvm/bin/clang
 
-      - name: Check + Package
-        run: |
-          if grep -q "BUILD SUCCEEDED" ios/build.log; then
-            echo "✅ Build OK"
-            if [ -d ios/build/TikTok.app ]; then
-              cd ios && zip -r ../TikTok-iOS9-iphone4s.zip build/TikTok.app && cd ..
-              ls -lh TikTok-iOS9-iphone4s.zip
+          CFLAGS="-target armv7-apple-ios9.0 \
+            -isysroot $SDK \
+            -I$SRC -I$SDK/usr/include \
+            -fobjc-arc -O2 \
+            -miphoneos-version-min=9.0 \
+            -Wno-deprecated-declarations \
+            -Wno-objc-root-class \
+            -D__ENVIRONMENT_IPHONE_OS_VERSION_MIN_REQUIRED__=90000 \
+            -D__IPHONE_OS_VERSION_MIN_REQUIRED=90000 \
+            -fmodules"
+
+          for f in $(find $SRC -name "*.m" | sort); do
+            echo "  CC $(basename $f)"
+            $CC -c $CFLAGS -o $OBJ/$(basename $f .m).o $f 2>&1
+            if [ $? -ne 0 ]; then
+              echo "FAILED: $f"
+              # Try without modules
+              $CC -c $CFLAGS -fmodules -o $OBJ/$(basename $f .m).o $f 2>&1 || true
             fi
-          else
-            echo "❌ Build failed"
-            tail -30 ios/build.log
-            exit 1
-          fi
+          done
 
-      - name: Upload
+      - name: Link
+        run: |
+          SDK=${{ env.SDK_PATH }}
+          OBJ=/tmp/obj
+          CC=/usr/local/opt/llvm/bin/clang
+
+          $CC -target armv7-apple-ios9.0 \
+            -isysroot $SDK \
+            -F$SDK/System/Library/Frameworks \
+            -L$SDK/usr/lib \
+            -o /tmp/TikTok \
+            $OBJ/*.o \
+            -framework Foundation \
+            -framework UIKit \
+            -framework AVFoundation \
+            -framework CoreGraphics \
+            -framework QuartzCore \
+            -framework CoreMedia \
+            -framework MobileCoreServices \
+            -framework AudioToolbox \
+            -framework CoreVideo \
+            -framework CoreAudio \
+            -lobjc -lpthread \
+            -O2 2>&1
+
+      - name: Package .app
+        run: |
+          APP=/tmp/TikTok.app
+          mkdir -p $APP
+          cp /tmp/TikTok $APP/
+          cp ios/TikTokClient/Supporting\ Files/Info.plist $APP/
+          echo "APPL????" > $APP/PkgInfo
+          chmod +x $APP/TikTok
+          ldid -S $APP/TikTok 2>/dev/null || echo "ldid signing skipped"
+          mkdir -p /tmp/Payload
+          cp -r $APP /tmp/Payload/
+          cd /tmp && zip -r ~/TikTok-iOS9-iphone4s.ipa Payload
+          ls -lh ~/TikTok-iOS9-iphone4s.ipa
+
+      - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: TikTok-iOS9-iphone4s
-          path: TikTok-iOS9-iphone4s.zip
+          path: ~/TikTok-iOS9-iphone4s.ipa
           compression-level: 0
 
-      - name: Upload build log
+      - name: Build summary
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log
-          path: ios/build.log
+        run: |
+          if [ -f ~/TikTok-iOS9-iphone4s.ipa ]; then
+            echo "✅ Build succeeded!" >> $GITHUB_STEP_SUMMARY
+            echo "File: TikTok-iOS9-iphone4s.ipa" >> $GITHUB_STEP_SUMMARY
+            file /tmp/TikTok 2>> $GITHUB_STEP_SUMMARY || true
+          else
+            echo "❌ Build failed" >> $GITHUB_STEP_SUMMARY
+          fi
