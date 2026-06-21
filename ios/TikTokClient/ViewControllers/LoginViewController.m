@@ -21,6 +21,13 @@
   [super viewDidLoad];
   self.view.backgroundColor = [UIColor blackColor];
   [self setupUI];
+
+  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillShow:) name:UIKeyboardWillShowNotification object:nil];
+  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
+}
+
+- (void)dealloc {
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (void)setupUI {
@@ -157,6 +164,24 @@
   UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Error" message:msg preferredStyle:UIAlertControllerStyleAlert];
   [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
   [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)keyboardWillShow:(NSNotification *)n {
+  CGRect kb = [n.userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
+  NSTimeInterval dur = [n.userInfo[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+  CGFloat overlap = CGRectGetMaxY(self.loginButton.frame) - kb.origin.y;
+  if (overlap > 0) {
+    [UIView animateWithDuration:dur animations:^{
+      self.view.transform = CGAffineTransformMakeTranslation(0, -overlap - 20);
+    }];
+  }
+}
+
+- (void)keyboardWillHide:(NSNotification *)n {
+  NSTimeInterval dur = [n.userInfo[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+  [UIView animateWithDuration:dur animations:^{
+    self.view.transform = CGAffineTransformIdentity;
+  }];
 }
 
 @end
